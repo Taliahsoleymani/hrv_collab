@@ -5,3 +5,4 @@ Data(HR and respiratory rate) was collected during MRI scans
 This data was saved using the bids format https://bids-specification.readthedocs.io/en/stable/modality-specific-files/physiological-and-other-continuous-recordings.html 
 ## Study Design and Time points 
 Our study is a double blind cross over study with sub anethisic dose of ketamine(0.5 mg/kg) and saline as the placebo 
+![Study Design](Study_Design.png)
