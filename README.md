@@ -58,7 +58,7 @@ Before using the notebooks, ensure:
 ## R Markdown
 
 This file can be used to:
-1. Check if BMI, age, and gender are available to determine if they are confounding variables.
+1. If available, explore BMI, age, and gender to determine if they are confounding variables.
 2. Combine MADRS (mood rating) scores with `HRV_Data_Loop_Test` (output file).
 3. Perform statistical analysis.
 4. Plot:
