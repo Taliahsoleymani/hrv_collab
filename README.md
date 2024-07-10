@@ -59,7 +59,7 @@ Before using the notebooks, ensure:
 
 This file can be used to:
 1. If available, explore BMI, age, and gender to determine if they are confounding variables.
-2. Combine MADRS (mood rating) scores with `HRV_Data_Loop_Test` (output file).
+2. Combine MADRS (mood rating) 'MADRS_Sample.csv 'scores with `HRV_Data_Loop_Test` (output file).
 3. Perform statistical analysis.
 4. Plot:
    - Mood Rating Before and After Infusion
