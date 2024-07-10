@@ -1,0 +1,13 @@
+Subject_ID,Session_date,Infusion,Interval,MADRS_Total,Drug
+sub-RD114,ses-20191015,1,pre,39,A
+sub-RD114,ses-20191015,1,post,35,A
+sub-RD114,ses-20191022,2,pre,27,B
+sub-RD114,ses-20191022,2,post,18,B
+sub-RD119,ses-20210504,1,pre,42,A
+sub-RD119,ses-20210504,1,post,31,A
+sub-RD119,ses-20210427,2,pre,32,B
+sub-RD119,ses-20210427,2,post,26,B
+sub-RD123,ses-20220517,1,pre,23,A
+sub-RD123,ses-20220517,1,post,14,A
+sub-RD123,ses-20220510,2,pre,27,B
+sub-RD123,ses-20220510,2,post ,21,B
