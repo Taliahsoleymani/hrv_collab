@@ -29,18 +29,27 @@ setwd("/Users/soleymanitl/Documents/HRV")
 
 ### Set the directory for saving plots and output
 ```{r}
-plot_dir <- "/Users/soleymanitl/Documents/HRV/Test_Subjects_Analysis_Output"
-output_dir <- "/Users/soleymanitl/Documents/HRV/Test_Subjects_Analysis_Output"
+# Define the base directory as a variable
+base_dir <- "/Users/soleymanitl/Documents/HRV/"
+
+# Use the base directory to construct plot_dir and output_dir
+plot_dir <- file.path(base_dir, "Test_Subjects_Analysis_Output")
+output_dir <- file.path(base_dir, "Test_Subjects_Analysis_Output")
 ```
 
 ## Load HRV_Data_Loop_Test and MADRS_Sample
 
 ```{r}
-#Here you can load the samples or your own data 
-HRVData <- read.csv("/Users/soleymanitl/Documents/HRV/Test_Subjects_Physio_Output/HRV_Data_Loop_Test.csv")
-head(HRV_Data_Loop_Test)
+# Construct the paths using the base directory
+#define the path of the sample files or your own data
+hrv_data_path <- file.path(base_dir, "Test_Subjects_Physio_Output", "HRV_Data_Loop_Test.csv")
+madrs_data_path <- file.path(base_dir, "Data", "MADRS_Sample.csv")
 
-MADRS <- read.csv("/Users/soleymanitl/Documents/HRV/Data/MADRS_Sample.csv")
+# Load the data using the constructed paths
+HRVData <- read.csv(hrv_data_path)
+head(HRVData)
+
+MADRS <- read.csv(madrs_data_path)
 head(MADRS)
 ```
 
