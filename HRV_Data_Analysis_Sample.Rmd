@@ -51,6 +51,14 @@ head(HRVData)
 
 MADRS <- read.csv(madrs_data_path)
 head(MADRS)
+
+#Load here HRV_ConfoundingFactors_Sample or your own file of confounding factors 
+CF_data_path <- file.path(base_dir, "Data", "HRV_ConfoundingFactors_Sample.xlsx")
+
+# Load the data using the constructed paths
+CF <- read.csv(CF_data_path)
+head(CF)
+
 ```
 
 - The `HRV_Data_Loop_Test.csv` spreadsheet contains the heart rate (HR) and heart rate variability (HRV) measures.
@@ -152,16 +160,13 @@ HRVData %>% filter(PPG_Rate_Mean > 40) %>% filter(PPG_Rate_Mean < 110) %>% ggplo
   geom_histogram(binwidth = 0.5)
 ```
 
-#### Load HRV_ConfoundingFactors_Sample
+#### Merge HRV_MADRS with CF HRV_ConfoundingFactors_Sample
 
 ```{r}
-#Load here HRV_ConfoundingFactors_Sample or your own file of confounding factors 
-RD_CF <- read_excel("/Users/soleymanitl/Documents/HRV/Data/HRV_ConfoundingFactors_Sample.xlsx")
-head(RD_CF)
 
-HRV_MADRS$Age <- RD_CF$Age[match(HRV_MADRS$Subject_number, RD_CF$Subject_number)]
-HRV_MADRS$Sex <- RD_CF$Sex[match(HRV_MADRS$Subject_number, RD_CF$Subject_number)]
-HRV_MADRS$BMI <- RD_CF$BMI[match(HRV_MADRS$Subject_number, RD_CF$Subject_number)]
+HRV_MADRS$Age <- RD_CF$Age[match(HRV_MADRS$Subject_number, CF$Subject_number)]
+HRV_MADRS$Sex <- RD_CF$Sex[match(HRV_MADRS$Subject_number, CF$Subject_number)]
+HRV_MADRS$BMI <- RD_CF$BMI[match(HRV_MADRS$Subject_number, CF$Subject_number)]
 
 head(HRV_MADRS)
 ```
