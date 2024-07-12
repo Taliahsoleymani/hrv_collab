@@ -67,3 +67,6 @@ This file can be used to:
    - Average HRV at Scan Time Points
    - Effect of Placebo on HRV
    - Correlation Between Change in Mood Rating and HR Level at the End of the Infusion
+## Acknowledgements
+
+This project would not have been possible without the guidance and help of Dr. Jen Evans. Thank you! I also extend our gratitude to the patients who generously contributed to the study that inspired this project.
