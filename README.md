@@ -55,6 +55,17 @@ Before using the notebooks, ensure:
 
 *See the folder of Test_Subjects_Physio_Output.*
 
+### Data Folder
+This folder contains files that will be used in the data analysis like:
+  - HRV_ConfoundingFactors_Sample.xlsx - a spreadsheet of Subject_IDs and possible confounding factors like BMI, Sex, and Age
+  - MADRS_Sample.csv - a spreadsheet containing the following columns:
+     - Subject_ID
+     - Session_date
+     - MADRS_Total
+     - Drug
+     - Infusion - coded with 1 or 2, referring to which infusion it was
+     - Interval - coded with "pre" or "post", referring to the timepoint in relation to the infusion
+
 ## R Markdown
 
 This file can be used to:
