@@ -57,7 +57,7 @@ Before using the notebooks, ensure:
 
 ### Data Folder
 This folder contains files that will be used in the data analysis like:
-  - HRV_ConfoundingFactors_Sample.xlsx - a spreadsheet of Subject_IDs and possible confounding factors like BMI, Sex, and Age
+  - HRV_ConfoundingFactors_Sample.csv - a spreadsheet of Subject_IDs and possible confounding factors like BMI, Sex, and Age
   - MADRS_Sample.csv - a spreadsheet containing the following columns:
      - Subject_ID
      - Session_date
