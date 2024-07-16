@@ -1,0 +1,926 @@
+
+---
+title: "HRV_Data_Analysis"
+author: "Taliah Soleymani"
+date: "2024-07-05"
+output: html_document
+---
+
+## Load relevant packages
+
+```{r}
+# Assign libs with the packages needed by using c()
+libs <- c("tidyr", "dplyr", "ggplot2", "ggrepel", "tibble", "rmarkdown", "pheatmap", "colorspace", "colormap", "reshape2", "data.table", "scales", "tidyverse", "stringr", "readxl", "patchwork", "Matrix", "lme4", "lmerTest", "pbkrtest")
+
+# lapply() function is useful for performing operations on list objects
+lapply(libs, require, character.only = TRUE)
+
+# rm() removes object from the environment
+rm(libs)
+```
+
+
+### Set the base directory, working directory and directory for saving plots and output
+```{r}
+# Define the base directory as a variable
+base_dir <- "/Users/soleymanitl/Documents/HRV/"
+
+setwd(base_dir)
+
+# Use the base directory to construct plot_dir and output_dir
+plot_dir <- file.path(base_dir, "Test_Subjects_Analysis_Output")
+output_dir <- file.path(base_dir, "Test_Subjects_Analysis_Output")
+```
+
+## Load HRV_Data_Loop_Test and MADRS_Sample
+
+```{r}
+# Construct the paths using the base directory
+#define the path of the sample files or your own data
+hrv_data_path <- file.path(base_dir, "Test_Subjects_Physio_Output", "HRV_Data_Loop_Test.csv")
+madrs_data_path <- file.path(base_dir, "Data", "MADRS_Sample.csv")
+
+# Load the data using the constructed paths
+HRVData <- read.csv(hrv_data_path)
+head(HRVData)
+
+MADRS <- read.csv(madrs_data_path)
+head(MADRS)
+
+#Load here HRV_ConfoundingFactors_Sample or your own file of confounding factors 
+CF_data_path <- file.path(base_dir, "Data", "HRV_ConfoundingFactors_Sample.csv")
+
+# Load the data using the constructed paths
+CF <- read.csv(CF_data_path)
+head(CF)
+
+```
+
+- The `HRV_Data_Loop_Test.csv` spreadsheet contains the heart rate (HR) and heart rate variability (HRV) measures.
+- The `MADRS_Sample.csv` spreadsheet contains the MADRS scores (mood ratings) pre and post-infusion.
+- Note: the data has been changed and should not be used to test out hypotheses. Additionally, many of these plots will not look complete due to the sample being only of three patients. 
+
+## 1. Organize HRV_Data_Loop_Test and MADRS
+
+### 1.a. Subset and Modify Dataframes
+
+#### Subset HRV_Data_Loop_Test to HRVData
+
+```{r}
+HRVData <- subset(HRVData, select = c("sub", "ses", "run", "PPG_Rate_Mean", "HRV_SDANN1", "HRV_SDNNI1", "HRV_RMSSD", "HRV_pNN50", "HRV_LFHF", "HRV_LFn", "HRV_HFn"))
+head(HRVData)
+```
+
+#### Modify Column Names
+
+```{r}
+HRVData <- HRVData %>%
+  rename(Subject_number = sub, Session_date = ses)
+head(HRVData)
+
+MADRS <- MADRS %>%
+  rename(Subject_number = Subject_ID)
+head(MADRS)
+```
+
+#### Format Columns
+
+```{r}
+# HRVData formatting
+HRVData$Subject_number <- substring(HRVData$Subject_number, nchar(as.character(HRVData$Subject_number)) - 2)
+HRVData$Session_date <- substring(HRVData$Session_date, nchar(as.character(HRVData$Session_date)) - 7)
+head(HRVData)
+
+# MADRS formatting
+MADRS$Subject_number <- substring(MADRS$Subject_number, nchar(as.character(MADRS$Subject_number)) - 2)
+MADRS$Session_date <- substring(MADRS$Session_date, nchar(as.character(MADRS$Session_date)) - 7)
+head(MADRS)
+```
+
+### 1.b. Label Scans
+
+#### Label Scans
+
+```{r}
+table(HRVData$run)
+
+HRVData$Timepoint <- ifelse(grepl("run-001", HRVData$run), "Infusion_Baseline",
+                             ifelse(grepl("run-01", HRVData$run), "Infusion_Baseline",
+                                    ifelse(grepl("run-101", HRVData$run), "Infusion_Beginning",
+                                           ifelse(grepl("run-201", HRVData$run), "Infusion_End", NA))))
+head(HRVData)
+```
+### 1.c. Prepare MADRS and HRVData to Merge 
+#### Add Timepoint to the MADRS
+
+```{r}
+MADRS <- within(MADRS, Timepoint <- ifelse(grepl("pre", MADRS$Interval), "Infusion_Baseline",
+                                                         ifelse(grepl("post", MADRS$Interval), "Infusion_End", NA)))
+```
+
+
+#### Add Drug Column to HRVData
+
+```{r}
+HRVData <- merge(HRVData, MADRS[, c("Subject_number", "Session_date", "Drug", "Infusion")], 
+                  by = c("Subject_number", "Session_date"))
+head(HRVData)
+```
+
+#### Merge HRVData and MADRS into HRV_MADRS
+
+```{r}
+HRV_MADRS <- merge(MADRS, HRVData[, c("Subject_number", "Session_date", "Timepoint", "PPG_Rate_Mean", "HRV_SDANN1", "HRV_SDNNI1", "HRV_RMSSD", "HRV_pNN50", "HRV_LFHF", "HRV_LFn", "HRV_HFn")], 
+                   by = c("Subject_number", "Session_date", "Timepoint"))
+
+# Display the result
+print(HRV_MADRS)
+```
+
+## 2. EDA - Visualizing HRV, Mood Ratings, and KET vs. PBO
+
+### 2.a. Distribution of HR, BMI, Age
+
+#### Histogram of HR
+
+```{r}
+HRVData %>% ggplot(aes(x = PPG_Rate_Mean)) +
+  geom_histogram(binwidth = 0.5)
+```
+
+#### Filter Out Abnormal HRs
+
+```{r}
+HRVData %>% filter(PPG_Rate_Mean > 40) %>% filter(PPG_Rate_Mean < 110) %>% ggplot(aes(x = PPG_Rate_Mean)) +
+  geom_histogram(binwidth = 0.5)
+```
+
+#### Merge HRV_MADRS with CF HRV_ConfoundingFactors_Sample
+
+```{r}
+
+HRV_MADRS$Age <- CF$Age[match(HRV_MADRS$Subject_number, CF$Subject_number)]
+HRV_MADRS$Sex <- CF$Sex[match(HRV_MADRS$Subject_number, CF$Subject_number)]
+HRV_MADRS$BMI <- CF$BMI[match(HRV_MADRS$Subject_number, CF$Subject_number)]
+
+head(HRV_MADRS)
+```
+
+#### Histogram of BMI
+
+```{r}
+CF %>% ggplot(aes(x = BMI)) +
+  geom_histogram(binwidth = 0.5)
+```
+
+#### Histogram of Age
+
+```{r}
+CF %>% ggplot(aes(x = Age)) +
+  geom_histogram(binwidth = 0.5)
+```
+
+### 2.b. Correlation Between Confounding Factors and HR
+
+#### Scatterplot: Age vs. HR
+
+```{r}
+HRV_MADRS %>% filter(Timepoint %in% c("Infusion_Baseline")) %>% ggplot(aes(Age, PPG_Rate_Mean)) +
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, color = "blue")
+```
+
+#### Scatterplot: BMI vs. HR
+
+```{r}
+HRV_MADRS %>% filter(Timepoint %in% c("Infusion_Baseline")) %>% ggplot(aes(BMI, PPG_Rate_Mean)) +
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, color = "blue")
+```
+
+#### Scatterplot: Sex vs. HR
+
+```{r}
+table(HRV_MADRS$Sex)
+
+Sex_Average_HR_Baseline <- HRV_MADRS %>%
+  filter(Timepoint %in% c("Infusion_Baseline")) %>%
+  group_by(Sex) %>%
+  summarise(avg_PPG_Rate_Mean = mean(PPG_Rate_Mean))
+
+HRV_MADRS %>% filter(Timepoint %in% c("Infusion_Baseline")) %>% ggplot(aes(Sex, PPG_Rate_Mean)) +
+  geom_point() + 
+  geom_point(data = Sex_Average_HR_Baseline, aes(x = Sex, y = avg_PPG_Rate_Mean), color = "red", size = 3) + 
+  labs(title = "Scatterplot with Average For Baseline", x = "Gender", y = "PPG Rate Mean")
+```
+
+### 2.c. Drug and Mood Effect
+
+#### Mood Ratings Post-Infusion
+
+```{r}
+HRV_MADRS %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(Drug, MADRS_Total, group = Subject_number, color = as.factor(Subject_number))) +
+
+  
+  geom_point() + 
+  geom_line()
+```
+
+#### Mood Ratings Pre- and Post-Infusion
+
+```{r}
+HRV_MADRS %>%
+  ggplot(aes(x = Drug, y = MADRS_Total)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  facet_wrap(~Timepoint)
+```
+
+### 2.d. Effect of Randomization (AB vs BA)
+
+#### Assign Randomization Pattern to Scans
+
+```{r}
+HRV_MADRS_recoded <- HRV_MADRS %>%
+  mutate(Randomization = case_when(
+    Infusion == "1" & Drug == "A" ~ "AB",
+    Infusion == "2" & Drug == "A" ~ "BA",
+    Infusion == "2" & Drug == "B" ~ "AB",
+    Infusion == "1" & Drug == "B" ~ "BA",
+    TRUE ~ NA_character_))
+head(HRV_MADRS_recoded)
+table(HRV_MADRS_recoded$Randomization)
+table(HRV_MADRS_recoded$Infusion)
+```
+
+
+#### Facet Plot of MADRS_Totals Pre- and Post-Infusion
+
+```{r}
+HRV_MADRS_recoded %>%
+  filter(!(Subject_number %in% c("108", "110", "114"))) %>%
+  ggplot(aes(x = Infusion, y = MADRS_Total)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  facet_grid(Timepoint ~ Randomization)
+```
+
+### 2.e. Difference in Measures During vs. Baseline
+
+#### Calculate the Difference for All Measures
+
+```{r}
+HRV_MADRS_Result <- HRV_MADRS_recoded %>%
+  filter(Timepoint %in% c("Infusion_End", "Infusion_Baseline")) %>% 
+  group_by(Subject_number, Session_date, Infusion, Drug, Randomization, Sex, BMI, Age) %>%
+  arrange(Subject_number, Session_date, Infusion, Timepoint) %>%
+  reframe(
+    MADRS_Total_diff = MADRS_Total - lag(MADRS_Total),
+    PPG_Rate_Mean_diff = PPG_Rate_Mean - lag(PPG_Rate_Mean),
+    HRV_SDANN1_diff = HRV_SDANN1 - lag(HRV_SDANN1),
+    HRV_SDNNI1_diff = HRV_SDNNI1 - lag(HRV_SDNNI1),
+    HRV_RMSSD_diff = HRV_RMSSD - lag(HRV_RMSSD),
+    HRV_pNN50_diff = HRV_pNN50 - lag(HRV_pNN50),
+    HRV_LFHF_diff = HRV_LFHF - lag(HRV_LFHF),
+    HRV_LFn_diff = HRV_LFn - lag(HRV_LFn),
+    HRV_HFn_diff = HRV_HFn - lag(HRV_HFn)) %>% na.omit()
+
+# Print the result
+head(HRV_MADRS_Result)
+```
+
+#### Difference in Mood Rating
+
+```{r}
+HRV_MADRS_Result %>%
+  ggplot(aes(x = Drug, y = MADRS_Total_diff)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2)
+```
+
+#### Difference in Mood Ratings with Randomization Effect
+
+```{r}
+HRV_MADRS_Result %>%
+  ggplot(aes(x = Infusion, y = MADRS_Total_diff)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  facet_wrap(~Randomization)
+```
+#### Merge difference in MADRS score and HRV data 
+
+```{r}
+MADRS_diff_HRV <- merge(HRVData, HRV_MADRS_Result[c("Subject_number", "Session_date", "MADRS_Total_diff")], 
+                     by = c("Subject_number", "Session_date"), all.x = TRUE)
+```
+
+
+### 2.f. Drug Effect on HRV Measures
+
+#### HRV Measures Post-Infusion
+
+```{r}
+# Different measures PPG_Rate_Mean, HRV_SDANN1, HRV_RMSSD, HRV_pNN50, HRV_LFHF, HRV_LFn, HRV_HFn
+PPG_Rate_Mean_Plot1 <- HRV_MADRS %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(Drug, PPG_Rate_Mean, group = Subject_number, color = as.factor(Subject_number))) +  
+  geom_point() + 
+  geom_line()
+
+HRV_SDANN1_Plot1 <- HRV_MADRS %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(Drug, HRV_SDANN1, group = Subject_number, color = as.factor(Subject_number))) +  
+  geom_point() + 
+  geom_line()
+
+HRV_RMSSD_Plot1 <- HRV_MADRS %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(Drug, HRV_RMSSD, group = Subject_number, color = as.factor(Subject_number))) +  
+  geom_point() + 
+  geom_line()
+
+HRV_pNN50_Plot1 <- HRV_MADRS %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(Drug, HRV_pNN50, group = Subject_number, color = as.factor(Subject_number))) +  
+  geom_point() + 
+  geom_line()
+
+HRV_HFn_Plot1 <- HRV_MADRS %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(Drug, HRV_HFn, group = Subject_number, color = as.factor(Subject_number))) +  
+  geom_point() + 
+  geom_line()
+
+HRV_LFn_Plot1 <- HRV_MADRS %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(Drug, HRV_LFn, group = Subject_number, color = as.factor(Subject_number))) +  
+  geom_point() + 
+  geom_line()
+
+HRV_LFHF_Plot1 <- HRV_MADRS %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(Drug, HRV_LFHF, group = Subject_number, color = as.factor(Subject_number))) +  
+  geom_point() + 
+  geom_line()
+
+Combined_HRV_Plot1 <- HRV_SDANN1_Plot1 + HRV_RMSSD_Plot1 + HRV_pNN50_Plot1 + HRV_HFn_Plot1 + HRV_LFn_Plot1 + HRV_LFHF_Plot1
+
+# Visualize all the plots side by side
+Combined_HRV_Plot1
+
+# Add the Mood Plot 
+Mood_Plot1 <- HRV_MADRS %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(Drug, MADRS_Total, group = Subject_number, color = as.factor(Subject_number))) +  
+  geom_point() + 
+  geom_line()
+
+Combined_HRV_Mood_Plot1 <- Mood_Plot1 + PPG_Rate_Mean_Plot1 + HRV_RMSSD_Plot1 + HRV_LFn_Plot1 + HRV_LFHF_Plot1
+Combined_HRV_Mood_Plot1
+```
+
+#### Boxplots of HRV Measures
+
+```{r}
+# Different measures PPG_Rate_Mean, HRV_SDANN1, HRV_RMSSD, HRV_pNN50, HRV_LFHF, HRV_LFn, HRV_HFn
+
+# PPG_Rate_Mean
+HRV_MADRS_recoded %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(x = Drug, y = PPG_Rate_Mean)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2)
+
+# HRV_RMSSD
+HRV_MADRS_recoded %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(x = Drug, y = HRV_RMSSD)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2)
+
+# HRV_LFn
+HRV_MADRS_recoded %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(x = Drug, y = HRV_LFn)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width =
+
+ 0.2)
+
+# HRV_HFn
+HRV_MADRS_recoded %>%
+  filter(Timepoint %in% c("Infusion_End")) %>%
+  ggplot(aes(x = Drug, y = HRV_HFn)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2)
+```
+
+
+## 3. The Final Plots
+
+### 3.a. Comparing Baseline and Post-infusion Ratings
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+HRV_MADRS <- HRV_MADRS %>%
+  mutate(Drug_Label = ifelse(Drug == "A", "KET", "PBO"),
+         Adjusted_Timepoint = ifelse(Timepoint == "Infusion_Baseline", "Baseline", "After Infusion"),
+         Adjusted_Timepoint = factor(Adjusted_Timepoint, levels = c("Baseline", "After Infusion")))
+
+plot <- HRV_MADRS %>%
+  ggplot(aes(x = Adjusted_Timepoint, y = MADRS_Total, color = Drug_Label)) +
+  geom_boxplot(outlier.shape = NA, size = 0.5) +  # Increased line thickness
+  geom_jitter(width = 0.2, size = 2) +  # Increased dot size
+  facet_wrap(~Drug_Label) +
+  labs(x = "Time Point", y = "Mood Rating") +  # Labels for X and Y axes
+  scale_color_manual(values = c("KET" = "#4E81BD", "PBO" = "#595959"), name = "Drug") +  # Updated color for PBO
+  theme_light() +  # Applying classic theme
+  theme(panel.grid = element_blank(), text = element_text(size = 28))  # Removing grid lines and setting font size
+
+print(plot)
+
+# Save the combined plot
+ggsave(
+  filename = file.path(plot_dir, "HRV_KET_PBO_Mood_before_after.png"), 
+  plot = plot, 
+  width = 12, 
+  height = 6, 
+  dpi = 300
+)
+```
+
+### 3.b. HR Over Time
+
+
+```{r}
+
+# Filter out rows with NAs in the Timepoint column
+HRVData2 <- HRVData[complete.cases(HRVData$Timepoint), ]
+
+# Define the factor levels for Timepoint
+timepoint_levels <- c("Infusion_Baseline", "Infusion_Beginning", "Infusion_End")
+
+# Replace "A" with "KET" and "B" with "PBO" in the Drug column
+HRVData2$Drug <- ifelse(HRVData2$Drug == "A", "KET", "PBO")
+
+# Calculate the average for each drug and time point
+avg_data <- HRVData2 %>%
+  group_by(Drug, Timepoint) %>%
+  summarize(avg_PPG_Rate_Mean = mean(PPG_Rate_Mean),
+            se = sd(PPG_Rate_Mean) / sqrt(n()),
+            .groups = 'drop')  # Add .groups argument to avoid the grouping issue
+
+# Plot for both drugs overlapped
+combined_plot <- ggplot(avg_data %>% filter(!is.na(avg_PPG_Rate_Mean)), 
+                        aes(x = factor(Timepoint, levels = timepoint_levels), y = avg_PPG_Rate_Mean, color = Drug, group = Drug)) +
+  geom_line(size = 1, show.legend = TRUE) +
+  geom_errorbar(aes(ymin = avg_PPG_Rate_Mean - se, ymax = avg_PPG_Rate_Mean + se), width = 0.25, show.legend = TRUE) +
+  labs(x = "Time Point", y = "HR (BPM)", color = "Drug") +
+  scale_x_discrete(labels = c("Infusion_Baseline" = "Baseline", "Infusion_Beginning" = "Beginning of Infusion", "Infusion_End" = "End of Infusion")) +
+  scale_color_manual(values = c("KET" = "#4E81BD", "PBO" = "#595959"), name = "Drug", labels = c("KET" = "KET", "PBO" = "PBO")) +
+  theme_light() +
+  theme(panel.grid = element_blank(), text = element_text(size = 28)) +
+  coord_cartesian(clip = "off")  # Prevent clipping of long x-axis labels
+
+print(combined_plot)
+
+# Save the combined plot
+ggsave(
+  filename = file.path(plot_dir, "HRV_averageHR_KET_PBO_combined.png"), 
+  plot = combined_plot, 
+  width = 12, 
+  height = 6, 
+  dpi = 300
+)
+
+```
+
+
+### 3.c. HRV Over Time
+
+
+```{r}
+# Calculate the average for each drug and time point
+avg_data <- HRVData2 %>%
+  group_by(Drug, Timepoint) %>%
+  summarize(avg_HRV_RMSSD = mean(HRV_RMSSD),
+            se = sd(HRV_RMSSD) / sqrt(n()),
+            .groups = 'drop')  # Add .groups argument to avoid the grouping issue
+
+# Plot for both drugs overlapped
+combined_plot <- ggplot(avg_data %>% filter(!is.na(avg_HRV_RMSSD)), 
+                        aes(x = factor(Timepoint, levels = timepoint_levels), y = avg_HRV_RMSSD, color = Drug, group = Drug)) +
+  geom_line(size = 2, show.legend = TRUE) +  # Increased line size to 2
+  geom_errorbar(aes(ymin = avg_HRV_RMSSD - se, ymax = avg_HRV_RMSSD + se), width = 0.25, show.legend = TRUE) +
+  labs(x = "Time Point", y = "HRV (RMSSD)", color = "Drug") +
+  scale_x_discrete(labels = c("Infusion_Baseline" = "Baseline", "Infusion_Beginning" = "Beginning of Infusion", "Infusion_End" = "End of Infusion")) +
+  scale_color_manual(values = c("KET" = "#4E81BD", "PBO" = "#595959"), name = "Drug", labels = c("KET" = "KET", "PBO" = "PBO")) +
+  theme_light() +
+  theme(panel.grid = element_blank(), text = element_text(size = 28)) +
+  coord_cartesian(clip = "off")  # Prevent clipping of long x-axis labels
+
+print(combined_plot)
+
+# Save the combined plot
+ggsave(
+  filename = file.path(plot_dir, "HRV_averageHRV_KET_PBO_combined.png"), 
+  plot = combined_plot, 
+  width = 12, 
+  height = 6, 
+  dpi = 300
+)
+```
+
+### 3.d. Effect of Placebo on HRV
+
+```{r}
+# Create a new grouping variable for infusion groups
+HRVData3 <- HRVData2 %>%
+  mutate(Infusion_Group = case_when(
+    Infusion == 1 ~ "1st Infusion",
+    Infusion == 2 ~ "2nd Infusion",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(Timepoint %in% c("Infusion_Baseline", "Infusion_Beginning")) %>%
+  filter(Drug == "PBO") %>% # Make sure Drug is either PBO or whatever your placebo is labeled as
+  drop_na()  # Remove rows with NA values in any column
+
+# Ensure there is data for both infusion groups
+table(HRVData3$Infusion_Group)
+
+# Plot the data
+plot <- ggplot(HRVData3, aes(Timepoint, HRV_RMSSD, group = Subject_number)) +
+  geom_jitter(width = 0, height = 0.2, size = 4, color = "black", show.legend = FALSE) +  # Add jittered black points with only vertical jitter
+  geom_line(color = "gray") +  # Add lines connecting dots for each subject
+  labs(x = "Time point", y = "HRV (RMSSD)") +
+  scale_x_discrete(labels = c("Infusion_Baseline" = "Baseline",
+                              "Infusion_Beginning" = "Beginning\nof Infusion"),
+                   expand = c(0.4, 0.4)) +  # Add more space between time points
+  theme_light() +  # Apply light theme
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 28)) +  # Set font size to 28
+  coord_cartesian(clip = "on") +  # Label axes
+  facet_grid(~Infusion_Group)  # Facet by Infusion Group (1st and 2nd Infusion)
+
+# Display the plot
+print(plot)
+
+# Save the combined plot
+ggsave(
+  filename = file.path(plot_dir, "Effect_Placebo_HRV.png"), 
+  plot = plot, 
+  width = 12, 
+  height = 6, 
+  dpi = 300
+)
+
+```
+
+### 3.e. Correlation Between Change in Mood Rating and HR Level at Baseline
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Assuming MADRS_diff_HRV is your merged dataset containing columns MADRS_Total_diff, PPG_Rate_Mean, and Timepoint
+
+# Filter the data for Timepoint "Infusion Baseline"
+filtered_data <- filter(MADRS_diff_HRV, Timepoint == "Infusion_Baseline")
+
+# Create the scatter plot with a trendline
+plot_d <- ggplot(filtered_data, aes(x = MADRS_Total_diff, y = PPG_Rate_Mean)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "#4E81BD") +  # Add trendline
+  labs(x = "Change in Mood Rating", y = "HR (BPM)", title = "Mood Rating Difference VS HR at Baseline") +
+  theme_light() +  # Applying classic theme
+  theme(panel.grid = element_blank(), text = element_text(size = 28)) +  # Setting font size to 28
+  coord_cartesian(clip = "off")  # Prevent clipping of long x-axis labels
+plot_d
+
+# Save the combined plot
+ggsave(
+  filename = file.path(plot_dir, "HR_mood_diff_baseline.png"), 
+  plot = plot_d, 
+  width = 12, 
+  height = 6, 
+  dpi = 300
+)
+
+```
+
+### 3.f. Correlation Between Change in Mood Rating and HR Level at the End of Infusion
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Assuming MADRS_diff_HRV is your merged dataset containing columns MADRS_Total_diff, PPG_Rate_Mean, and Timepoint
+
+# Filter the data for Timepoint "Infusion_End"
+filtered_data <- filter(MADRS_diff_HRV, Timepoint == "Infusion_End")
+
+# Create the scatter plot with a trendline
+plot_d <- ggplot(filtered_data, aes(x = MADRS_Total_diff, y = PPG_Rate_Mean)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "#4E81BD") +  # Add trendline
+  labs(x = "Change in Mood Rating", y = "HR (BPM)", title = "Mood Rating Difference VS HR During Infusion") +
+  theme_light() +  # Applying classic theme
+  theme(panel.grid = element_blank(), text = element_text(size = 28)) +  # Setting font size to 28
+  coord_cartesian(clip = "off")  # Prevent clipping of long x-axis labels
+
+
+# Save the combined plot
+ggsave(
+  filename = file.path(plot_dir, "HR_level_mood_rating_end.png"), 
+  plot = plot_d, 
+  width = 12, 
+  height = 6, 
+  dpi = 300
+)
+
+```
+
+
+## 4. The Model
+The stats will not work with the sample since there are not enough samples 
+### 4.a. Mood Rating Model
+
+#### Prepare Data for Model
+
+
+```{r}
+
+# Make data frame that aligns with model 
+Model_mood <- subset(HRV_MADRS_recoded, Timepoint == "Infusion_End", select = c("Subject_number", "Drug", "Infusion", "Session_date", "MADRS_Total"))
+head(Model_mood)
+
+# Add Average Baseline 
+average_mood_baseline <- HRV_MADRS_recoded %>%
+  filter(Timepoint == "Infusion_Baseline") %>%
+  group_by(Subject_number) %>%
+  summarize(average_mood_baseline = mean(MADRS_Total, na.rm = TRUE))
+
+Model_mood <- left_join(Model_mood, average_mood_baseline, by = "Subject_number")
+head(Model_mood)
+
+# Add column Mood_Baseline
+HRV_MADRS_renamed <- HRV_MADRS_recoded %>% 
+  filter(Timepoint == "Infusion_Baseline") %>% 
+  select(Subject_number, Session_date, MADRS_Total) %>%
+  rename(Mood_baseline = MADRS_Total)
+
+Model_mood <- left_join(Model_mood, HRV_MADRS_renamed, by = c("Subject_number", "Session_date"))
+head(Model_mood)
+
+# Ensure "Drug" column has the correct levels
+Model_mood$Drug <- factor(Model_mood$Drug, levels = c("B", "A")) # Make sure the levels include "B" and "A"
+
+# Relevel the "Drug" variable to set "B" as the reference level
+Model_mood$Drug <- relevel(Model_mood$Drug, ref = "B")
+levels(Model_mood$Drug) # Check the levels
+
+# View the Model_mood dataframe
+head(Model_mood)
+
+```
+
+#### Fit MADRS_Total Model
+
+```{r}
+library(Matrix)
+library(lme4)
+
+# Relevel the "Drug" variable to set "DrugB" as the reference level
+Model_mood$Drug <- factor(Model_mood$Drug)
+Model_mood$Drug <- relevel(Model_mood$Drug, ref = "B")
+
+# Fit the mixed-effects model
+M1 <- lmer(MADRS_Total ~ Drug + Mood_baseline + average_mood_baseline + Infusion + (1 | Subject_number), data = Model_mood)
+
+# Save the output as PDF
+output_file <- file.path(output_dir, "MADRS_Total_model_output.pdf")
+pdf(output_file)
+print(summary(M1))
+emm <- emmeans(M1, "Drug")
+pairwise <- pairs(emm, adjust = "tukey")
+print(pairwise)
+dev.off()
+```
+
+### 4.b. HR Model
+
+#### Prepare Data for Model
+
+```{r}
+# Make data frame that aligns with the model
+Model_HR <- subset(HRV_MADRS_recoded, Timepoint == "Infusion_End", select = c("Subject_number", "Drug", "Infusion", "Session_date", "PPG_Rate_Mean"))
+head(Model_HR)
+
+# Add Average Baseline 
+average_PPG_Rate_Mean <- HRV_MADRS_recoded %>%
+  filter(Timepoint == "Infusion_Baseline") %>%
+  group_by(Subject_number) %>%
+  summarize(average_PPG_Rate_Mean = mean(PPG_Rate_Mean, na.rm = TRUE))
+
+Model_HR <- left_join(Model_HR, average_PPG_Rate_Mean, by = "Subject_number")
+head(Model_HR)
+
+# Add column PPG_Rate_Baseline
+HRV_MADRS_renamed <- HRV_MADRS_recoded %>% 
+  filter(Timepoint == "Infusion_Baseline") %>% 
+  select(Subject_number, Session_date, PPG_Rate_Mean) %>%
+  rename(PPG_Rate_Baseline = PPG_Rate_Mean)
+
+Model_HR <- left_join(Model_HR, HRV_MADRS_renamed, by = c("Subject_number", "Session_date"))
+head(Model_HR)
+
+# Ensure "Drug" column has the correct levels
+Model_HR$Drug <- factor(Model_HR$Drug, levels = c("B", "A")) # Make sure the levels include "B" and "A"
+
+# Relevel the "Drug" variable to set "B" as the reference level
+Model_HR$Drug <- relevel(Model_HR$Drug, ref = "B")
+levels(Model_HR$Drug) # Check the levels
+
+# Head the Model_HR dataframe
+head(Model_HR)
+```
+
+#### Fit HR Model
+
+```{r}
+
+# Fit the mixed-effects model
+M2 <- lmer(PPG_Rate_Mean ~ Drug + PPG_Rate_Baseline + average_PPG_Rate_Mean + Infusion + (1 | Subject_number), data = Model_HR)
+
+# Save the output as PDF
+output_file <- file.path(output_dir, "HR_model_output.pdf")
+pdf(output_file)
+print(summary(M2))
+emm <- emmeans(M2, "Drug")
+pairwise <- pairs(emm, adjust = "tukey")
+print(pairwise)
+dev.off()
+```
+
+### 4.c. HRV_RMSSD Model
+
+#### Prepare Data for Model
+
+```{r}
+# Make data frame that aligns with the model
+Model_RMSSD <- subset(HRV_MADRS_recoded, Timepoint == "Infusion_End", select = c("Subject_number", "Drug", "Infusion", "Session_date", "HRV_RMSSD"))
+head(Model_RMSSD)
+
+# Add Average Baseline 
+average_HRV_RMSSD <- HRV_MADRS_recoded %>%
+  filter(Timepoint == "Infusion_Baseline") %>%
+  group_by(Subject_number) %>%
+  summarize(average_HRV_RMSSD = mean(HRV_RMSSD, na.rm = TRUE))
+
+Model_RMSSD <- left_join(Model_RMSSD, average_HRV_RMSSD, by = "Subject_number")
+head(Model_RMSSD)
+
+# Add column HRV_RMSSD_Baseline
+HRV_MADRS_renamed <- HRV_MADRS_recoded %>% 
+  filter(Timepoint == "Infusion_Baseline") %>% 
+  select(Subject_number, Session_date, HRV_RMSSD) %>%
+  rename(HRV_RMSSD_Baseline = HRV_RMSSD)
+
+Model_RMSSD <- left_join(Model_RMSSD, HRV_MADRS_renamed, by = c("Subject_number", "Session_date"))
+head(Model_RMSSD)
+
+# Ensure "Drug" column has the correct levels
+Model_RMSSD$Drug <- factor(Model_RMSSD$Drug, levels = c("B", "A")) # Make sure the levels include "B" and "A"
+
+# Relevel the "Drug" variable to set "B" as the reference level
+Model_RMSSD$Drug <- relevel(Model_RMSSD$Drug, ref = "B")
+levels(Model_RMSSD$Drug) # Check the levels
+
+# Head the Model_RMSSD dataframe
+head(Model_RMSSD)
+```
+
+#### Fit HRV_RMSSD Model
+
+```{r}
+
+# Fit the mixed-effects model
+M3 <- lmer(HRV_RMSSD ~ Drug + HRV_RMSSD_Baseline + average_HRV_RMSSD + Infusion + (1 | Subject_number), data = Model_RMSSD)
+
+# Save the output as PDF
+output_file <- file.path(output_dir, "HRV_RMSSD_model_output.pdf")
+pdf(output_file)
+print(summary(M3))
+emm <- emmeans(M3, "Drug")
+pairwise <- pairs(emm, adjust = "tukey")
+print(pairwise)
+dev.off()
+```
+
+### 4.d. HRV_LFn Model
+
+#### Prepare Data for Model
+
+```{r}
+# Make data frame that aligns with the model
+Model_LFn <- subset(HRV_MADRS_recoded, Timepoint == "Infusion_End", select = c("Subject_number", "Drug", "Infusion", "Session_date", "HRV_LFn"))
+head(Model_LFn)
+
+# Add Average Baseline 
+average_HRV_LFn <- HRV_MADRS_recoded %>%
+  filter(Timepoint == "Infusion_Baseline") %>%
+  group_by(Subject_number) %>%
+  summarize(average_HRV_LFn = mean(HRV_LFn, na.rm = TRUE))
+
+Model_LFn <- left_join(Model_LFn, average_HRV_LFn, by = "Subject_number")
+head(Model_LFn)
+
+# Add column HRV_LFn_Baseline
+HRV_MADRS_renamed <- HRV_MADRS_recoded %>% 
+  filter(Timepoint == "Infusion_Baseline") %>% 
+  select(Subject_number, Session_date, HRV_LFn) %>%
+  rename(HRV_LFn_Baseline = HRV_LFn)
+
+Model_LFn <- left_join(Model_LFn, HRV_MADRS_renamed, by = c("Subject_number", "Session_date"))
+head(Model_LFn)
+
+# Ensure "Drug" column has the correct levels
+Model_LFn$Drug <- factor(Model_LFn$Drug, levels = c("B", "A")) # Make sure the levels include "B" and "A"
+
+# Relevel the "Drug" variable to set "B" as the reference level
+Model_LFn$Drug <- relevel(Model_LFn$Drug, ref = "B")
+levels(Model_LFn$Drug) # Check the levels
+
+# Head the Model_LFn dataframe
+head(Model_LFn)
+
+```
+
+#### Fit HRV_LFn Model
+
+```{r}
+
+# Fit the mixed-effects model
+M4 <- lmer(HRV_LFn ~ Drug + HRV_LFn_Baseline + average_HRV_LFn + Infusion + (1 | Subject_number), data = Model_LFn)
+
+# Save the output as PDF
+output_file <- file.path(output_dir, "HRV_LFn_model_output.pdf")
+pdf(output_file)
+print(summary(M4))
+emm <- emmeans(M4, "Drug")
+pairwise <- pairs(emm, adjust = "tukey")
+print(pairwise)
+dev.off()
+
+```
+
+### 4.e. Mood ~ Drug*PPG_Rate_Mean Model
+
+#### Prepare Data for Model
+
+```{r}
+# Join Model_mood with relevant columns from Model_HR
+common_cols <- c("Subject_number", "Drug", "Infusion", "Session_date")
+
+Combined_Model <- left_join(Model_mood, 
+                            Model_HR %>% select(one_of(common_cols, "PPG_Rate_Mean", "average_PPG_Rate_Mean", "PPG_Rate_Baseline")),
+                            by = common_cols)
+
+# Check the combined data frame
+head(Combined_Model)
+```
+
+#### Fit Mood ~ Drug*PPG_Rate_Mean Model
+
+```{r}
+library(Matrix)
+library(lme4)
+
+# Relevel the "Drug" variable to set "DrugB" as the reference level
+Combined_Model$Drug <- factor(Combined_Model$Drug)
+Combined_Model$Drug <- relevel(Combined_Model$Drug, ref = "B")
+
+# Fit the mixed-effects model
+M5 <- lmer(MADRS_Total ~ Drug * PPG_Rate_Mean + Mood_baseline + average_mood_baseline + Infusion + (1 | Subject_number), data = Combined_Model)
+
+# Save the output as PDF
+output_file <- file.path(output_dir, "Mood_Drug_PPG_Rate_Mean_model_output.pdf")
+pdf(output_file)
+print(summary(M5))
+emm <- emmeans(M5, "Drug")
+pairwise <- pairs(emm, adjust = "tukey")
+print(pairwise)
+dev.off()
+
+# Plot effects
+library(effects)
+pdf(file.path(output_dir, "Mood_Drug_PPG_Rate_Mean_model_effects.pdf"))
+plot(allEffects(M5))
+plot(effect(term = "Drug", mod = M5))
+dev.off()
+```
+
