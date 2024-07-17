@@ -1,6 +1,6 @@
 # HRV Collaboration Pipeline
 
-This repository offers a pipeline to study the physiological effects of an infusion given during an MRI scan on individuals with mood disorders. It enables the collection, processing, and analysis of data such as heart rate (HR), helping researchers explore the infusion's impact on physiological parameters related to mood disorder symptoms.
+This repository provides a pipeline to study the physiological effects of an infusion administered during an MRI scan on individuals with mood disorders. It facilitates the processing and analysis of heart rate (HR) data, allowing researchers to examine the infusion's impact on physiological parameters associated with mood disorder symptoms.
 
 ## Study Design and Time Points
 
